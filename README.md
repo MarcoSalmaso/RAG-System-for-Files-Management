@@ -34,7 +34,7 @@ Un sistema RAG (Retrieval-Augmented Generation) per analizzare e interrogare i f
 
 1. Clona il repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/MarcoSalmaso/RAG-System-for-Files-Management
 cd RAG-System
 ```
 
