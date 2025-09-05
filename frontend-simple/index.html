@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Analyzer RAG System</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .tab-button.active { 
+            background: rgb(37, 99, 235);
+            color: white;
+        }
+        .loading { 
+            display: inline-block;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .file-item {
+            transition: all 0.3s ease;
+        }
+        .file-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-folder-open text-blue-600"></i>
+                File Analyzer RAG System
+            </h1>
+            <p class="text-gray-600">Analizza i tuoi file e fai domande intelligenti per liberare spazio</p>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="flex justify-center space-x-2 mb-8">
+            <button onclick="switchTab('scan')" class="tab-button active px-6 py-3 rounded-lg font-medium bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+                <i class="fas fa-search mr-2"></i>Scansiona
+            </button>
+            <button onclick="switchTab('query')" class="tab-button px-6 py-3 rounded-lg font-medium bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+                <i class="fas fa-comments mr-2"></i>Domande AI
+            </button>
+            <button onclick="switchTab('vectors')" class="tab-button px-6 py-3 rounded-lg font-medium bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+                <i class="fas fa-project-diagram mr-2"></i>Grafico Vettori
+            </button>
+        </div>
+
+        <!-- Scan Tab -->
+        <div id="scan-tab" class="tab-content active">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-semibold mb-4">
+                    <i class="fas fa-folder-tree text-blue-600 mr-2"></i>
+                    Scansiona Directory
+                </h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Percorso Directory</label>
+                        <input type="text" id="scan-path" value="~/Desktop" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="~/Documents">
+                        <p class="text-xs text-gray-500 mt-1">Inserisci il percorso della directory da analizzare (es. ~/Desktop o /percorso/completo)</p>
+                    </div>
+                    
+                    <div class="flex items-center space-x-6">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="include-hidden" class="mr-2">
+                            <span class="text-sm">Includi file nascosti</span>
+                        </label>
+                        
+                        <div class="flex items-center space-x-2">
+                            <label class="text-sm font-medium text-gray-700">Profondità:</label>
+                            <input type="number" id="max-depth" value="2" min="1" max="10"
+                                   class="w-20 px-2 py-1 border border-gray-300 rounded">
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4">
+                        <button onclick="scanDirectory()" id="scan-btn"
+                                class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-search mr-2"></i>Scansiona
+                        </button>
+                        
+                        <button onclick="clearIndex()"
+                                class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                            <i class="fas fa-trash mr-2"></i>Pulisci Indice
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results -->
+                <div id="scan-results" class="mt-6 hidden">
+                    <h3 class="text-lg font-semibold mb-4">Risultati Scansione</h3>
+                    <div id="scan-results-content" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Query Tab -->
+        <div id="query-tab" class="tab-content">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-semibold mb-4">
+                    <i class="fas fa-brain text-green-600 mr-2"></i>
+                    Fai Domande AI sui File
+                </h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">La tua domanda</label>
+                        <input type="text" id="query-text" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                               placeholder="Quali sono i file più grandi che posso eliminare?"
+                               onkeypress="if(event.key === 'Enter') queryFiles()">
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <button onclick="queryFiles()" id="query-btn"
+                                class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <i class="fas fa-search mr-2"></i>Cerca
+                        </button>
+                        
+                        <div class="text-sm text-gray-600">
+                            Esempi: "file duplicati", "directory più pesanti", "file vecchi da eliminare"
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Query Results -->
+                <div id="query-results" class="mt-6 hidden">
+                    <div id="query-response" class="bg-blue-50 rounded-lg p-4 mb-4"></div>
+                    <div id="query-files" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vectors Visualization Tab -->
+        <div id="vectors-tab" class="tab-content">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-semibold mb-4">
+                    <i class="fas fa-project-diagram text-purple-600 mr-2"></i>
+                    Visualizzazione Vettori Database
+                </h2>
+                
+                <div class="mb-4 flex justify-between items-center">
+                    <p class="text-sm text-gray-600">
+                        Visualizzazione grafica dei documenti vettorializzati nel database. 
+                        I punti vicini rappresentano file con contenuto simile.
+                    </p>
+                    <button onclick="loadVectors()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                        <i class="fas fa-sync mr-2"></i>Aggiorna
+                    </button>
+                </div>
+                
+                <!-- Legenda -->
+                <div id="vectors-legend" class="mb-4 flex flex-wrap gap-2"></div>
+                
+                <!-- Canvas per il grafico -->
+                <div class="relative bg-gray-50 rounded-lg p-4" style="height: 600px;">
+                    <canvas id="vectors-canvas" width="800" height="600"></canvas>
+                    
+                    <!-- Info tooltip -->
+                    <div id="vector-tooltip" class="hidden absolute bg-white shadow-lg rounded-lg p-3 z-10" style="pointer-events: none;">
+                        <div class="font-semibold" id="tooltip-name"></div>
+                        <div class="text-sm text-gray-600" id="tooltip-path"></div>
+                        <div class="text-sm text-gray-500" id="tooltip-size"></div>
+                    </div>
+                </div>
+                
+                <!-- Stats -->
+                <div id="vectors-stats" class="mt-4 grid grid-cols-3 gap-4">
+                    <div class="bg-blue-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-blue-600" id="total-vectors">0</div>
+                        <div class="text-sm text-gray-600">Documenti Totali</div>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-green-600" id="unique-categories">0</div>
+                        <div class="text-sm text-gray-600">Categorie</div>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-purple-600" id="clusters-count">0</div>
+                        <div class="text-sm text-gray-600">Cluster Identificati</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        // Scan directory
+        async function scanDirectory() {
+            let path = document.getElementById('scan-path').value;
+            const includeHidden = document.getElementById('include-hidden').checked;
+            const maxDepth = parseInt(document.getElementById('max-depth').value);
+            
+            if (!path) {
+                alert('Inserisci un percorso valido');
+                return;
+            }
+            
+            // Converti il percorso nel formato Docker
+            if (path.startsWith('~')) {
+                // Sostituisce ~ con /host_users per il container Docker
+                path = path.replace('~', '/host_users');
+            } else if (path.startsWith('/')) {
+                // Per percorsi assoluti, li mappiamo sotto /host_users
+                path = '/host_users' + path;
+            } else {
+                alert('Il percorso deve iniziare con ~ o /');
+                return;
+            }
+            
+            const btn = document.getElementById('scan-btn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Scansionando...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch(`${API_BASE}/scan`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        path: path,
+                        include_hidden: includeHidden,
+                        max_depth: maxDepth
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayScanResults(data);
+                } else {
+                    alert(`Errore: ${data.detail || 'Errore sconosciuto'}`);
+                }
+            } catch (error) {
+                alert(`Errore di connessione: ${error.message}`);
+            } finally {
+                btn.innerHTML = '<i class="fas fa-search mr-2"></i>Scansiona';
+                btn.disabled = false;
+            }
+        }
+        
+        // Display scan results
+        function displayScanResults(data) {
+            const resultsDiv = document.getElementById('scan-results');
+            const contentDiv = document.getElementById('scan-results-content');
+            
+            resultsDiv.classList.remove('hidden');
+            
+            let html = `<div class="text-sm text-gray-600 mb-3">Trovati ${data.scanned_files || 0} elementi (ordinati per dimensione)</div>`;
+            
+            if (data.results && data.results.length > 0) {
+                // Ordina i risultati per dimensione (dal più grande al più piccolo)
+                const sortedResults = data.results.sort((a, b) => {
+                    const sizeA = a.size || 0;
+                    const sizeB = b.size || 0;
+                    return sizeB - sizeA;  // Ordine decrescente
+                });
+                
+                sortedResults.forEach((item, index) => {
+                    const isDirectory = item.type === 'directory';
+                    const icon = isDirectory ? 'fa-folder' : 'fa-file';
+                    const iconColor = isDirectory ? 'text-yellow-600' : 'text-gray-500';
+                    
+                    // Determina il colore di sfondo e il bordo basato sulla dimensione
+                    const size = item.size || 0;
+                    let bgColor = 'bg-gray-50';
+                    let borderColor = '';
+                    let sizeIndicator = '';
+                    
+                    if (size > 1024 * 1024 * 1024) { // > 1GB
+                        bgColor = 'bg-red-50';
+                        borderColor = 'border-l-4 border-red-500';
+                        sizeIndicator = '<span class="ml-2 px-2 py-1 bg-red-100 text-red-800 text-xs rounded font-bold">MOLTO GRANDE</span>';
+                    } else if (size > 100 * 1024 * 1024) { // > 100MB
+                        bgColor = 'bg-orange-50';
+                        borderColor = 'border-l-4 border-orange-500';
+                        sizeIndicator = '<span class="ml-2 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded">Grande</span>';
+                    } else if (size > 10 * 1024 * 1024) { // > 10MB
+                        bgColor = 'bg-yellow-50';
+                        borderColor = 'border-l-4 border-yellow-500';
+                        sizeIndicator = '<span class="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">Medio</span>';
+                    } else if (isDirectory && size > 0) {
+                        // Per directory piccole ma non vuote
+                        bgColor = 'bg-blue-50';
+                        borderColor = 'border-l-4 border-blue-300';
+                    }
+                    
+                    html += `
+                        <div class="file-item ${bgColor} ${borderColor} rounded-lg p-4 cursor-pointer">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center">
+                                        <span class="text-gray-400 font-mono text-xs mr-3">#${index + 1}</span>
+                                        <i class="fas ${icon} ${iconColor} mr-2"></i>
+                                        <span class="font-medium">${item.name}</span>
+                                        <span class="ml-2 px-2 py-1 ${isDirectory ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'} text-xs rounded">
+                                            ${item.type}
+                                        </span>
+                                        ${sizeIndicator}
+                                    </div>
+                                    <p class="text-sm text-gray-600 mt-1">${item.path}</p>
+                                    ${item.description ? `<p class="text-sm text-gray-700 italic mt-1"><i class="fas fa-info-circle text-blue-500 mr-1"></i>${item.description}</p>` : ''}
+                                    <div class="flex items-center space-x-4 text-xs text-gray-500 mt-2">
+                                        ${item.size_human ? `<span class="font-semibold text-gray-700">Dimensione: ${item.size_human}</span>` : ''}
+                                        ${item.file_count !== undefined ? `<span>${item.file_count} file, ${item.dir_count} directory</span>` : ''}
+                                        <span>Modificato: ${new Date(item.modified).toLocaleDateString('it-IT')}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            ${item.cleanup_suggestions && item.cleanup_suggestions.length > 0 ? `
+                                <div class="mt-3">
+                                    <div class="text-sm font-medium text-orange-700 mb-1">Suggerimenti:</div>
+                                    <div class="space-y-1">
+                                        ${item.cleanup_suggestions.map(s => `
+                                            <div class="text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded inline-block mr-2">
+                                                ${s}
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+            } else {
+                html += '<p class="text-gray-500">Nessun file trovato</p>';
+            }
+            
+            contentDiv.innerHTML = html;
+        }
+        
+        // Query files
+        async function queryFiles() {
+            const queryText = document.getElementById('query-text').value;
+            
+            if (!queryText) {
+                alert('Inserisci una domanda');
+                return;
+            }
+            
+            const btn = document.getElementById('query-btn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Cercando...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch(`${API_BASE}/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: queryText })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayQueryResults(data);
+                } else {
+                    alert(`Errore: ${data.detail || 'Errore sconosciuto'}`);
+                }
+            } catch (error) {
+                alert(`Errore di connessione: ${error.message}`);
+            } finally {
+                btn.innerHTML = '<i class="fas fa-search mr-2"></i>Cerca';
+                btn.disabled = false;
+            }
+        }
+        
+        // Display query results
+        function displayQueryResults(data) {
+            const resultsDiv = document.getElementById('query-results');
+            const responseDiv = document.getElementById('query-response');
+            const filesDiv = document.getElementById('query-files');
+            
+            resultsDiv.classList.remove('hidden');
+            
+            // Display AI response
+            responseDiv.innerHTML = `
+                <h3 class="font-semibold text-blue-800 mb-2">
+                    <i class="fas fa-robot mr-2"></i>Risposta AI
+                </h3>
+                <p>${data.response || 'Nessuna risposta'}</p>
+            `;
+            
+            // Display matching files
+            let filesHtml = '';
+            if (data.results && data.results.length > 0) {
+                filesHtml = `<h4 class="font-semibold mb-3">File Trovati (${data.total_results})</h4>`;
+                
+                data.results.forEach(result => {
+                    const relevance = Math.round(result.similarity_score * 100);
+                    filesHtml += `
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-file text-gray-500 mr-2"></i>
+                                        <span class="font-medium">${result.metadata.name}</span>
+                                        <span class="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
+                                            ${relevance}% rilevante
+                                        </span>
+                                    </div>
+                                    <p class="text-sm text-gray-600 mt-1">${result.metadata.path}</p>
+                                    <div class="flex items-center space-x-4 text-xs text-gray-500 mt-2">
+                                        ${result.metadata.size_human ? `<span>Dimensione: ${result.metadata.size_human}</span>` : ''}
+                                        <span>Modificato: ${new Date(result.metadata.modified).toLocaleDateString('it-IT')}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            filesDiv.innerHTML = filesHtml;
+        }
+        
+        // Clear index
+        async function clearIndex() {
+            if (!confirm('Sei sicuro di voler pulire l\'indice?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/clear`, { method: 'DELETE' });
+                
+                if (response.ok) {
+                    alert('Indice pulito con successo!');
+                    document.getElementById('scan-results').classList.add('hidden');
+                    document.getElementById('query-results').classList.add('hidden');
+                } else {
+                    alert('Errore durante la pulizia dell\'indice');
+                }
+            } catch (error) {
+                alert(`Errore di connessione: ${error.message}`);
+            }
+        }
+        
+        // Vectors visualization
+        let vectorsData = null;
+        let selectedCategory = null;
+        
+        // Colori per categorie
+        const categoryColors = {
+            'image': '#10B981',      // verde
+            'video': '#EF4444',       // rosso
+            'audio': '#F59E0B',       // arancione
+            'document': '#3B82F6',    // blu
+            'code': '#8B5CF6',        // viola
+            'archive': '#6B7280',     // grigio
+            'directory': '#F97316',   // arancione scuro
+            'other': '#94A3B8'        // grigio chiaro
+        };
+        
+        const categoryLabels = {
+            'image': 'Immagini',
+            'video': 'Video',
+            'audio': 'Audio',
+            'document': 'Documenti',
+            'code': 'Codice',
+            'archive': 'Archivi',
+            'directory': 'Cartelle',
+            'other': 'Altri'
+        };
+        
+        async function loadVectors() {
+            try {
+                const response = await fetch(`${API_BASE}/vectors`);
+                const data = await response.json();
+                
+                if (response.ok && !data.error) {
+                    vectorsData = data;
+                    displayVectorsVisualization(data);
+                    updateVectorsStats(data);
+                } else {
+                    console.error('Errore nel caricamento dei vettori:', data.error);
+                    alert('Nessun dato da visualizzare. Scansiona prima una directory.');
+                }
+            } catch (error) {
+                console.error('Errore di connessione:', error);
+                alert('Errore nel caricamento dei dati');
+            }
+        }
+        
+        function displayVectorsVisualization(data) {
+            const canvas = document.getElementById('vectors-canvas');
+            const ctx = canvas.getContext('2d');
+            const tooltip = document.getElementById('vector-tooltip');
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (!data.vectors || data.vectors.length === 0) {
+                ctx.fillStyle = '#666';
+                ctx.font = '16px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Nessun documento nel database', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+            
+            // Normalizza le coordinate per adattarle al canvas
+            const padding = 40;
+            const xValues = data.vectors.map(v => v.x);
+            const yValues = data.vectors.map(v => v.y);
+            const xMin = Math.min(...xValues);
+            const xMax = Math.max(...xValues);
+            const yMin = Math.min(...yValues);
+            const yMax = Math.max(...yValues);
+            const xRange = xMax - xMin || 1;
+            const yRange = yMax - yMin || 1;
+            
+            // Funzioni per scalare le coordinate
+            const scaleX = (x) => padding + ((x - xMin) / xRange) * (canvas.width - 2 * padding);
+            const scaleY = (y) => padding + ((y - yMin) / yRange) * (canvas.height - 2 * padding);
+            
+            // Disegna griglia di sfondo
+            ctx.strokeStyle = '#E5E7EB';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= 10; i++) {
+                const x = padding + (i / 10) * (canvas.width - 2 * padding);
+                const y = padding + (i / 10) * (canvas.height - 2 * padding);
+                
+                ctx.beginPath();
+                ctx.moveTo(x, padding);
+                ctx.lineTo(x, canvas.height - padding);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(padding, y);
+                ctx.lineTo(canvas.width - padding, y);
+                ctx.stroke();
+            }
+            
+            // Raggruppa i punti per categoria per disegnare i cluster
+            const clusters = {};
+            data.vectors.forEach(vector => {
+                if (!clusters[vector.category]) {
+                    clusters[vector.category] = [];
+                }
+                clusters[vector.category].push(vector);
+            });
+            
+            // Disegna i punti
+            data.vectors.forEach((vector, index) => {
+                const x = scaleX(vector.x);
+                const y = scaleY(vector.y);
+                const color = categoryColors[vector.category] || categoryColors['other'];
+                
+                // Determina la dimensione del punto basata sulla dimensione del file
+                const size = Math.min(Math.max(4, Math.log10(vector.size + 1) * 2), 20);
+                
+                // Disegna il punto
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, 2 * Math.PI);
+                ctx.fillStyle = color + '88'; // Aggiungi trasparenza
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Se è una directory, aggiungi un simbolo speciale
+                if (vector.type === 'directory') {
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('D', x, y);
+                }
+            });
+            
+            // Gestione mouse hover
+            canvas.onmousemove = function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                let hoveredVector = null;
+                let minDistance = Infinity;
+                
+                // Trova il punto più vicino al mouse
+                data.vectors.forEach(vector => {
+                    const x = scaleX(vector.x);
+                    const y = scaleY(vector.y);
+                    const distance = Math.sqrt(Math.pow(mouseX - x, 2) + Math.pow(mouseY - y, 2));
+                    
+                    if (distance < 20 && distance < minDistance) {
+                        minDistance = distance;
+                        hoveredVector = vector;
+                    }
+                });
+                
+                if (hoveredVector) {
+                    // Mostra tooltip
+                    tooltip.classList.remove('hidden');
+                    tooltip.style.left = (e.offsetX + 10) + 'px';
+                    tooltip.style.top = (e.offsetY - 40) + 'px';
+                    
+                    document.getElementById('tooltip-name').textContent = hoveredVector.name;
+                    document.getElementById('tooltip-path').textContent = hoveredVector.path;
+                    document.getElementById('tooltip-size').textContent = 'Dimensione: ' + hoveredVector.size_human;
+                    
+                    canvas.style.cursor = 'pointer';
+                } else {
+                    tooltip.classList.add('hidden');
+                    canvas.style.cursor = 'default';
+                }
+            };
+            
+            // Crea legenda
+            createLegend(data.categories);
+        }
+        
+        function createLegend(categories) {
+            const legendDiv = document.getElementById('vectors-legend');
+            legendDiv.innerHTML = '';
+            
+            categories.forEach(category => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center space-x-2 px-3 py-1 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100';
+                item.innerHTML = `
+                    <div class="w-4 h-4 rounded-full" style="background-color: ${categoryColors[category]}"></div>
+                    <span class="text-sm">${categoryLabels[category] || category}</span>
+                `;
+                
+                item.onclick = () => filterByCategory(category);
+                legendDiv.appendChild(item);
+            });
+        }
+        
+        function filterByCategory(category) {
+            if (selectedCategory === category) {
+                selectedCategory = null;
+            } else {
+                selectedCategory = category;
+            }
+            
+            if (vectorsData) {
+                const filteredData = selectedCategory 
+                    ? {...vectorsData, vectors: vectorsData.vectors.filter(v => v.category === selectedCategory)}
+                    : vectorsData;
+                displayVectorsVisualization(filteredData);
+            }
+        }
+        
+        function updateVectorsStats(data) {
+            document.getElementById('total-vectors').textContent = data.total || 0;
+            
+            const uniqueCategories = new Set(data.vectors.map(v => v.category));
+            document.getElementById('unique-categories').textContent = uniqueCategories.size;
+            
+            // Stima il numero di cluster (gruppi di file simili)
+            const estimatedClusters = Math.ceil(Math.sqrt(data.total / 2));
+            document.getElementById('clusters-count').textContent = estimatedClusters;
+        }
+        
+        // Carica automaticamente i vettori quando si apre il tab
+        const originalSwitchTab = switchTab;
+        switchTab = function(tabName) {
+            originalSwitchTab(tabName);
+            if (tabName === 'vectors') {
+                loadVectors();
+            }
+        };
+        
+        // Load initial stats
+        window.addEventListener('DOMContentLoaded', () => {
+            // Stats will be loaded when tab is clicked
+        });
+    </script>
+</body>
+</html>

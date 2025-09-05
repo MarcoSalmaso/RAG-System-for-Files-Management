@@ -1,0 +1,36 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+      - ${HOME}:/host_users:ro  # Mount user home directory read-only for file analysis
+      - chroma_data:/app/chroma_db
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  frontend:
+    build:
+      context: ./frontend-simple
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+volumes:
+  chroma_data:
+
+networks:
+  rag-network:
+    driver: bridge
