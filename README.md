@@ -41,7 +41,7 @@ Un sistema avanzato di Retrieval-Augmented Generation (RAG) per l'analisi e gest
 
 ```bash
 # Clona il repository
-git clone https://github.com/yourusername/RAG-System-for-Files-Management.git
+git clone https://github.com/MarcoSalmaso/RAG-System-for-Files-Management.git
 cd RAG-System-for-Files-Management
 
 # Avvia il sistema
