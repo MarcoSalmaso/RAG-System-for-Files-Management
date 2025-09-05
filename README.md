@@ -1,143 +1,205 @@
-# RAG System - File Analyzer
+# RAG System for Files Management 📁🤖
 
-Un sistema RAG (Retrieval-Augmented Generation) per analizzare e interrogare i file sul tuo computer locale utilizzando Docker.
+Un sistema avanzato di Retrieval-Augmented Generation (RAG) per l'analisi e gestione intelligente dei file del tuo sistema, con integrazione AI per chat conversazionale.
 
-## Funzionalità
+## ✨ Funzionalità Principali
 
-- 🔍 **Scansione File**: Analizza ricorsivamente directory e file
-- 💬 **Chat Intelligente**: Fai domande sui tuoi file utilizzando query in linguaggio naturale  
-- 📊 **Visualizzazione Vettoriale**: Visualizza i documenti come punti in uno spazio 2D basato sulla loro similarità
-- 📁 **Analisi Contenuto**: Genera descrizioni intelligenti basate sul contenuto dei file
-- 🗂️ **Ordinamento per Dimensione**: Visualizza file e cartelle ordinati dal più grande al più piccolo
+### 📊 Analisi File Avanzata
+- **Scansione ricorsiva** di directory con metadati dettagliati
+- **Analisi contenuto** per diversi tipi di file (testo, immagini, PDF, Excel, etc.)
+- **Calcolo dimensioni** con visualizzazione human-readable
+- **Rilevamento tipo MIME** e categorizzazione automatica
+- **Suggerimenti pulizia** per file temporanei, cache e duplicati
 
-## Stack Tecnologico
+### 🔍 Sistema RAG con Vector Search
+- **Embeddings semantici** con Sentence Transformers (all-MiniLM-L6-v2)
+- **Database vettoriale ChromaDB** per ricerca veloce e accurata
+- **Ricerca per similarità** con ranking di rilevanza
+- **Filtri avanzati** per dimensione, tipo, estensione
+- **Contesto persistente** per l'ultima cartella scansionata
 
-### Backend
-- **FastAPI**: Framework web Python per API REST
-- **ChromaDB**: Database vettoriale per memorizzare embeddings
-- **Sentence Transformers**: Modello per generare embeddings di testo (all-MiniLM-L6-v2)
-- **Python Libraries**: pandas, numpy, scikit-learn, pillow, pypdf2, python-docx
+### 💬 Chat AI Conversazionale
+- **DialoGPT-medium** integrato per conversazioni naturali
+- **Risposte contestuali** basate sui file scansionati
+- **Analisi intelligente** con suggerimenti personalizzati
+- **Template ottimizzati** per query comuni sui file
+- **Supporto multilingua** (italiano/inglese)
 
-### Frontend  
-- **HTML/JavaScript**: Interfaccia web semplice e responsive
-- **Tailwind CSS**: Framework CSS per lo styling
-- **Chart.js**: Libreria per visualizzazioni grafiche
-- **Canvas API**: Per la visualizzazione dei vettori
+### 📈 Visualizzazioni Dati
+- **Grafico vettori 3D** con PCA per visualizzare la distribuzione dei file
+- **Categorizzazione visuale** per tipo di file con colori distinti
+- **Statistiche sistema** con utilizzo CPU, memoria e disco
+- **Distribuzione tipi file** con grafici interattivi
 
-## Installazione
+## 🚀 Quick Start
 
 ### Prerequisiti
-- Docker e Docker Compose installati
-- Almeno 2GB di RAM disponibile
+- Docker e Docker Compose
+- Oppure Python 3.11+ per esecuzione locale
 
-### Setup
+### Installazione con Docker (Consigliato)
 
-1. Clona il repository:
 ```bash
-git clone https://github.com/MarcoSalmaso/RAG-System-for-Files-Management
-cd RAG-System
-```
+# Clona il repository
+git clone https://github.com/yourusername/RAG-System-for-Files-Management.git
+cd RAG-System-for-Files-Management
 
-2. Avvia i container Docker:
-```bash
+# Avvia il sistema
 docker-compose up --build
+
+# Apri nel browser
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8000
 ```
 
-3. Accedi all'interfaccia web:
+> **Nota**: Al primo avvio, il sistema scaricherà automaticamente DialoGPT-medium (~350MB) per la chat AI. Questo avviene in background e richiede 1-2 minuti. Nel frattempo, tutte le altre funzionalità sono già disponibili.
+
+### Installazione Locale
+
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+python main.py
+
+# Frontend (in un'altra finestra)
+cd frontend-simple
+python -m http.server 5173
 ```
-http://localhost:5173
-```
 
-## Utilizzo
+## 📖 Utilizzo
 
-### 1. Scansione Directory
-- Vai alla tab "Scansiona Directory"
-- Inserisci il percorso della directory da analizzare (es: `~/Desktop` o `/percorso/completo`)
-- Clicca "Avvia Scansione"
-- I risultati saranno mostrati ordinati per dimensione
+### 1. Scansiona una Directory
+- Vai alla tab **"Scansiona"**
+- Inserisci il percorso (es. `~/Desktop` o `/Users/nome/Documents`)
+- Clicca su "Analizza Directory"
+- Il sistema indicizzerà tutti i file trovati
 
-### 2. Domande AI
-- Vai alla tab "Domande AI"
-- Scrivi la tua domanda nella casella di testo
-- Esempi di domande:
+### 2. Chat Intelligente
+- Vai alla tab **"Chat AI"**
+- Fai domande sui tuoi file:
   - "Quali sono i file più grandi?"
-  - "Mostrami le immagini"
-  - "Trova documenti PDF"
-  - "Quali file posso eliminare per liberare spazio?"
-- I risultati includeranno file rilevanti con punteggio di similarità
+  - "Mostrami le cartelle più pesanti"
+  - "Cosa posso eliminare per liberare spazio?"
+  - "Dammi un riassunto della cartella"
+  - "Trova tutti i file immagine"
 
-### 3. Visualizzazione Vettoriale
-- Vai alla tab "Visualizzazione Vettori"
-- Clicca "Aggiorna" per caricare la visualizzazione
-- I punti rappresentano i file nel database
-- Colori diversi indicano categorie diverse (immagini, documenti, codice, ecc.)
-- Passa il mouse sui punti per vedere i dettagli del file
+### 3. Visualizza Grafico Vettori
+- Vai alla tab **"Grafico Vettori"**
+- Esplora la rappresentazione 3D dei tuoi file
+- I colori indicano diverse categorie (immagini, documenti, codice, etc.)
+- Passa il mouse sui punti per vedere i dettagli
 
-## Configurazione
+### 4. Statistiche Sistema
+- Vai alla tab **"Statistiche"**
+- Monitora l'utilizzo di CPU, RAM e disco
+- Visualizza la distribuzione dei tipi di file
 
-### Percorsi
-Il sistema monta automaticamente la home directory dell'utente. Per modificare questo comportamento, edita `docker-compose.yml`:
+## 🏗️ Architettura
 
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Frontend      │────▶│   Backend API   │────▶│   ChromaDB      │
+│   (HTML/JS)     │     │   (FastAPI)     │     │   (Vectors)     │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   AI Models         │
+                    │ - DialoGPT-medium   │
+                    │ - Sentence-Transform│
+                    └─────────────────────┘
+```
+
+## 🛠️ Stack Tecnologico
+
+### Backend
+- **FastAPI**: Framework web moderno e veloce
+- **ChromaDB**: Database vettoriale per embeddings
+- **Sentence Transformers**: Generazione embeddings semantici
+- **DialoGPT**: Modello conversazionale Microsoft/Hugging Face
+- **Python-Magic**: Rilevamento tipo MIME
+- **PyPDF2, python-docx, openpyxl**: Parsing documenti
+- **Pillow**: Analisi immagini
+- **psutil**: Statistiche sistema
+
+### Frontend
+- **HTML5/CSS3/JavaScript**: Interfaccia responsive
+- **Tailwind CSS**: Styling moderno
+- **Chart.js**: Visualizzazione grafici
+- **Three.js**: Rendering 3D vettori
+- **Fetch API**: Comunicazione con backend
+
+## 📋 API Endpoints
+
+| Endpoint | Metodo | Descrizione |
+|----------|--------|-------------|
+| `/scan` | POST | Scansiona una directory |
+| `/chat` | POST | Chat conversazionale AI |
+| `/query` | POST | Query RAG sui file |
+| `/stats` | GET | Statistiche sistema |
+| `/vectors` | GET | Vettori per visualizzazione |
+| `/file-types` | GET | Distribuzione tipi file |
+| `/clear` | DELETE | Pulisce l'indice |
+
+## 🔧 Configurazione
+
+### Docker Compose
 ```yaml
-volumes:
-  - ${HOME}:/host_users:ro  # Modifica ${HOME} con il percorso desiderato
+services:
+  backend:
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/chroma_db:/app/chroma_db  # Persistenza DB
+      - /:/host_root:ro  # Accesso file sistema (read-only)
+
+  frontend:
+    ports:
+      - "5173:80"
 ```
 
-### Porte
-- Backend API: porta 8000
-- Frontend Web: porta 5173
+### Variabili Ambiente
+- `CHROMA_DB_PATH`: Path database vettoriale (default: `./chroma_db`)
+- `MODEL_CACHE_DIR`: Cache modelli AI (default: `~/.cache/huggingface`)
+- `MAX_FILE_SIZE`: Dimensione max file analizzabile (default: 100MB)
 
-Per cambiare le porte, modifica `docker-compose.yml`.
-
-## API Endpoints
-
-- `POST /scan`: Scansiona una directory
-- `POST /query`: Esegue una query RAG
-- `GET /vectors`: Ottiene i vettori per la visualizzazione
-- `DELETE /clear`: Pulisce l'indice del database
-
-## Struttura Progetto
+## 📁 Struttura Progetto
 
 ```
-RAG-System/
+RAG-System-for-Files-Management/
 ├── backend/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── main.py              # FastAPI app principale
-│   ├── file_analyzer.py     # Logica di analisi file
-│   └── rag_system.py        # Sistema RAG con ChromaDB
+│   ├── main.py              # API FastAPI
+│   ├── rag_system.py        # Core RAG + AI
+│   ├── file_analyzer.py     # Analisi file
+│   ├── requirements.txt     # Dipendenze Python
+│   └── Dockerfile           
 ├── frontend-simple/
-│   ├── Dockerfile
-│   ├── nginx.conf
-│   └── index.html           # Interfaccia web
-├── docker-compose.yml
-└── README.md
+│   ├── index.html           # Interfaccia web
+│   └── Dockerfile
+├── docker-compose.yml       # Orchestrazione servizi
+└── README.md               # Questo file
 ```
 
-## Sicurezza
+## 🚦 Limitazioni e Note
 
-- I file sono montati in modalità **read-only** nel container Docker
-- Il sistema non modifica o elimina mai i file sul tuo computer
-- Il pulsante "Pulisci Indice" rimuove solo i dati dal database vettoriale, non i file reali
+- **Dimensione modello**: DialoGPT-medium (~350MB) scaricato al primo avvio
+- **Performance**: La prima chat potrebbe essere lenta (caricamento modello)
+- **Memoria**: Richiesti almeno 4GB RAM per funzionamento ottimale
+- **File grandi**: File >100MB potrebbero rallentare l'indicizzazione
+- **Percorsi Docker**: In Docker, i percorsi locali sono mappati su `/host_root`
 
-## Troubleshooting
+## 📝 License
 
-### Il container non si avvia
-```bash
-docker-compose down
-docker-compose up --build
-```
+MIT License - Vedi file [LICENSE](LICENSE) per dettagli
 
-### Errore di permessi
-Assicurati che Docker abbia i permessi per accedere alla directory che vuoi scansionare.
+## 🙏 Acknowledgments
 
-### Database corrotto
-```bash
-docker-compose down
-docker volume rm rag-system_chroma_data
-docker-compose up
-```
+- [ChromaDB](https://www.trychroma.com/) per il database vettoriale
+- [Hugging Face](https://huggingface.co/) per i modelli AI
+- [Microsoft DialoGPT](https://github.com/microsoft/DialoGPT) per il modello conversazionale
+- [Sentence Transformers](https://www.sbert.net/) per gli embeddings
 
-## License
+---
 
-MIT License
+Sviluppato con ❤️ per rendere la gestione file più intelligente e conversazionale.

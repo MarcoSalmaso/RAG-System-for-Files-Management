@@ -45,8 +45,8 @@
             <button onclick="switchTab('scan')" class="tab-button active px-6 py-3 rounded-lg font-medium bg-white text-gray-600 hover:bg-gray-50 transition-colors">
                 <i class="fas fa-search mr-2"></i>Scansiona
             </button>
-            <button onclick="switchTab('query')" class="tab-button px-6 py-3 rounded-lg font-medium bg-white text-gray-600 hover:bg-gray-50 transition-colors">
-                <i class="fas fa-comments mr-2"></i>Domande AI
+            <button onclick="switchTab('chat')" class="tab-button px-6 py-3 rounded-lg font-medium bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+                <i class="fas fa-robot mr-2"></i>Chat AI
             </button>
             <button onclick="switchTab('vectors')" class="tab-button px-6 py-3 rounded-lg font-medium bg-white text-gray-600 hover:bg-gray-50 transition-colors">
                 <i class="fas fa-project-diagram mr-2"></i>Grafico Vettori
@@ -104,39 +104,44 @@
             </div>
         </div>
 
-        <!-- Query Tab -->
-        <div id="query-tab" class="tab-content">
+        <!-- Chat AI Tab -->
+        <div id="chat-tab" class="tab-content">
             <div class="bg-white rounded-xl shadow-lg p-6">
                 <h2 class="text-2xl font-semibold mb-4">
-                    <i class="fas fa-brain text-green-600 mr-2"></i>
-                    Fai Domande AI sui File
+                    <i class="fas fa-robot text-green-600 mr-2"></i>
+                    Chat AI sui tuoi File
                 </h2>
                 
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">La tua domanda</label>
-                        <input type="text" id="query-text" 
-                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                               placeholder="Quali sono i file più grandi che posso eliminare?"
-                               onkeypress="if(event.key === 'Enter') queryFiles()">
-                    </div>
-                    
-                    <div class="flex items-center space-x-4">
-                        <button onclick="queryFiles()" id="query-btn"
-                                class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                            <i class="fas fa-search mr-2"></i>Cerca
-                        </button>
-                        
-                        <div class="text-sm text-gray-600">
-                            Esempi: "file duplicati", "directory più pesanti", "file vecchi da eliminare"
-                        </div>
+                <!-- Chat Messages Container -->
+                <div id="chat-messages" class="h-96 overflow-y-auto border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50">
+                    <div class="text-center text-gray-500 mt-32">
+                        <i class="fas fa-robot text-4xl mb-4"></i>
+                        <p>Ciao! Sono il tuo assistente AI per l'analisi dei file.</p>
+                        <p class="text-sm">Scansiona prima una directory, poi fammi delle domande sui tuoi file!</p>
                     </div>
                 </div>
-
-                <!-- Query Results -->
-                <div id="query-results" class="mt-6 hidden">
-                    <div id="query-response" class="bg-blue-50 rounded-lg p-4 mb-4"></div>
-                    <div id="query-files" class="space-y-2"></div>
+                
+                <!-- Chat Input -->
+                <div class="space-y-4">
+                    <div class="flex space-x-2">
+                        <input type="text" id="chat-input" 
+                               class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                               placeholder="Dimmi qualcosa sui miei file... (es. 'Quali sono i file più grandi?')"
+                               onkeypress="if(event.key === 'Enter') sendMessage()">
+                        <button onclick="sendMessage()" id="send-btn"
+                                class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <i class="fas fa-paper-plane mr-2"></i>Invia
+                        </button>
+                    </div>
+                    
+                    <div class="flex space-x-2">
+                        <button onclick="clearChat()" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm">
+                            <i class="fas fa-trash mr-1"></i>Pulisci Chat
+                        </button>
+                        <div class="flex-1 text-sm text-gray-600 py-2">
+                            Esempi: "file duplicati", "directory più pesanti", "file vecchi da eliminare", "dimmi il contenuto della cartella Desktop"
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -356,88 +361,134 @@
             contentDiv.innerHTML = html;
         }
         
-        // Query files
-        async function queryFiles() {
-            const queryText = document.getElementById('query-text').value;
+        // Chat functionality
+        let conversationHistory = [];
+        
+        async function sendMessage() {
+            const inputElement = document.getElementById('chat-input');
+            const message = inputElement.value.trim();
             
-            if (!queryText) {
-                alert('Inserisci una domanda');
+            if (!message) {
+                alert('Inserisci un messaggio');
                 return;
             }
             
-            const btn = document.getElementById('query-btn');
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Cercando...';
-            btn.disabled = true;
+            // Aggiungi messaggio utente alla chat
+            addMessageToChat(message, 'user');
+            inputElement.value = '';
+            
+            // Disabilita il bottone di invio
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Pensando...';
+            sendBtn.disabled = true;
             
             try {
-                const response = await fetch(`${API_BASE}/query`, {
+                const response = await fetch(`${API_BASE}/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: queryText })
+                    body: JSON.stringify({ 
+                        message: message,
+                        conversation_history: conversationHistory 
+                    })
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok) {
-                    displayQueryResults(data);
+                    // Aggiungi risposta AI alla chat
+                    addMessageToChat(data.response, 'ai');
+                    
+                    // Mostra file rilevanti se presenti
+                    if (data.relevant_files && data.relevant_files.length > 0) {
+                        showRelevantFiles(data.relevant_files);
+                    }
+                    
+                    // Aggiorna cronologia conversazione
+                    conversationHistory.push({role: 'user', content: message});
+                    conversationHistory.push({role: 'assistant', content: data.response});
+                    
+                    // Mantieni solo gli ultimi 10 messaggi per performance
+                    if (conversationHistory.length > 20) {
+                        conversationHistory = conversationHistory.slice(-20);
+                    }
                 } else {
-                    alert(`Errore: ${data.detail || 'Errore sconosciuto'}`);
+                    addMessageToChat(`Errore: ${data.detail || 'Errore sconosciuto'}`, 'error');
                 }
             } catch (error) {
-                alert(`Errore di connessione: ${error.message}`);
+                addMessageToChat(`Errore di connessione: ${error.message}`, 'error');
             } finally {
-                btn.innerHTML = '<i class="fas fa-search mr-2"></i>Cerca';
-                btn.disabled = false;
+                sendBtn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>Invia';
+                sendBtn.disabled = false;
             }
         }
         
-        // Display query results
-        function displayQueryResults(data) {
-            const resultsDiv = document.getElementById('query-results');
-            const responseDiv = document.getElementById('query-response');
-            const filesDiv = document.getElementById('query-files');
+        function addMessageToChat(message, type) {
+            const messagesContainer = document.getElementById('chat-messages');
             
-            resultsDiv.classList.remove('hidden');
-            
-            // Display AI response
-            responseDiv.innerHTML = `
-                <h3 class="font-semibold text-blue-800 mb-2">
-                    <i class="fas fa-robot mr-2"></i>Risposta AI
-                </h3>
-                <p>${data.response || 'Nessuna risposta'}</p>
-            `;
-            
-            // Display matching files
-            let filesHtml = '';
-            if (data.results && data.results.length > 0) {
-                filesHtml = `<h4 class="font-semibold mb-3">File Trovati (${data.total_results})</h4>`;
-                
-                data.results.forEach(result => {
-                    const relevance = Math.round(result.similarity_score * 100);
-                    filesHtml += `
-                        <div class="bg-gray-50 rounded-lg p-4">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <div class="flex items-center">
-                                        <i class="fas fa-file text-gray-500 mr-2"></i>
-                                        <span class="font-medium">${result.metadata.name}</span>
-                                        <span class="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
-                                            ${relevance}% rilevante
-                                        </span>
-                                    </div>
-                                    <p class="text-sm text-gray-600 mt-1">${result.metadata.path}</p>
-                                    <div class="flex items-center space-x-4 text-xs text-gray-500 mt-2">
-                                        ${result.metadata.size_human ? `<span>Dimensione: ${result.metadata.size_human}</span>` : ''}
-                                        <span>Modificato: ${new Date(result.metadata.modified).toLocaleDateString('it-IT')}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
+            // Rimuovi il messaggio di benvenuto se presente
+            const welcomeMsg = messagesContainer.querySelector('.text-center');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
             }
             
-            filesDiv.innerHTML = filesHtml;
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `mb-4 ${type === 'user' ? 'text-right' : 'text-left'}`;
+            
+            let bgColor = '';
+            let icon = '';
+            let alignment = '';
+            
+            if (type === 'user') {
+                bgColor = 'bg-blue-500 text-white';
+                alignment = 'ml-auto';
+                icon = '<i class="fas fa-user mr-2"></i>';
+            } else if (type === 'ai') {
+                bgColor = 'bg-gray-200 text-gray-800';
+                alignment = 'mr-auto';
+                icon = '<i class="fas fa-robot mr-2"></i>';
+            } else if (type === 'error') {
+                bgColor = 'bg-red-100 text-red-800 border border-red-300';
+                alignment = 'mr-auto';
+                icon = '<i class="fas fa-exclamation-triangle mr-2"></i>';
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="inline-block max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${bgColor} ${alignment}">
+                    ${type !== 'user' ? icon : ''}${message.replace(/\n/g, '<br>')}
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function showRelevantFiles(files) {
+            if (files.length === 0) return;
+            
+            let filesHtml = '<div class="text-sm text-gray-600 mb-2">📁 File rilevanti:</div>';
+            files.slice(0, 3).forEach(file => {
+                const similarity = file.similarity_score ? Math.round(file.similarity_score * 100) : 0;
+                filesHtml += `
+                    <div class="text-xs bg-blue-50 p-2 rounded mb-1">
+                        <span class="font-medium">${file.metadata.name}</span>
+                        <span class="text-blue-600">(${similarity}%)</span><br>
+                        <span class="text-gray-500">${file.metadata.size_human || 'N/A'}</span>
+                    </div>
+                `;
+            });
+            
+            addMessageToChat(filesHtml, 'ai');
+        }
+        
+        function clearChat() {
+            const messagesContainer = document.getElementById('chat-messages');
+            messagesContainer.innerHTML = `
+                <div class="text-center text-gray-500 mt-32">
+                    <i class="fas fa-robot text-4xl mb-4"></i>
+                    <p>Chat pulita! Fammi altre domande sui tuoi file.</p>
+                </div>
+            `;
+            conversationHistory = [];
         }
         
         // Clear index

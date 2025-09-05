@@ -24,11 +24,17 @@ file_analyzer = FileAnalyzer()
 rag_system = RAGSystem()
 
 def convert_path_for_display(path: str) -> str:
-    """Converte i percorsi Docker in percorsi user-friendly per la visualizzazione"""
-    if path.startswith('/host_users'):
-        # Ottiene il percorso home dell'utente dal sistema
-        home_path = os.environ.get('HOME', '/home/user')
-        return path.replace('/host_users', home_path)
+    """Converte i percorsi per la visualizzazione"""
+    # Espandi ~ in percorso home reale
+    if path.startswith('~'):
+        path = os.path.expanduser(path)
+    return path
+
+def convert_input_path(path: str) -> str:
+    """Converte percorsi di input in percorsi assoluti"""
+    # Espandi ~ in percorso home reale
+    if path.startswith('~'):
+        return os.path.expanduser(path)
     return path
 
 def convert_results_paths(results: List[Dict]) -> List[Dict]:
@@ -49,6 +55,10 @@ class QueryRequest(BaseModel):
     query: str
     filters: Optional[Dict[str, Any]] = None
 
+class ChatRequest(BaseModel):
+    message: str
+    conversation_history: Optional[List[Dict[str, str]]] = None
+
 @app.get("/")
 async def root():
     return {"message": "File Analyzer RAG System API"}
@@ -56,14 +66,20 @@ async def root():
 @app.post("/scan")
 async def scan_directory(request: ScanRequest):
     try:
-        if not os.path.exists(request.path):
-            raise HTTPException(status_code=404, detail="Path not found")
+        # Converti il percorso di input
+        actual_path = convert_input_path(request.path)
+        
+        if not os.path.exists(actual_path):
+            raise HTTPException(status_code=404, detail=f"Path not found: {actual_path}")
         
         results = await file_analyzer.scan_directory(
-            request.path, 
+            actual_path, 
             request.include_hidden, 
             request.max_depth
         )
+        
+        # Set the scanned path context for chat responses
+        rag_system.set_scanned_path_context(actual_path)
         
         # Store results in vector database
         await rag_system.index_files(results)
@@ -87,6 +103,23 @@ async def query_files(request: QueryRequest):
         # Converti i percorsi nei risultati
         if 'results' in response:
             response['results'] = convert_results_paths(response['results'].copy())
+        
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat")
+async def chat_with_ai(request: ChatRequest):
+    """Endpoint per chat conversazionale con AI"""
+    try:
+        response = await rag_system.chat_with_ai(
+            user_message=request.message,
+            conversation_history=request.conversation_history
+        )
+        
+        # Converti i percorsi nei risultati
+        if 'relevant_files' in response:
+            response['relevant_files'] = convert_results_paths(response['relevant_files'].copy())
         
         return response
     except Exception as e:
