@@ -182,16 +182,68 @@ class FileAnalyzer:
                 pass
         
         # File di testo
-        elif mime_type.startswith("text/") or extension in ['.txt', '.py', '.js', '.html', '.css', '.json', '.xml']:
+        elif mime_type.startswith("text/") or extension in ['.txt', '.py', '.js', '.html', '.css', '.json', '.xml', '.md', '.log', '.csv', '.sql', '.yaml', '.yml']:
             try:
-                if file_info["size"] < 1024 * 1024:  # Max 1MB per analisi testo
+                if file_info["size"] < 5 * 1024 * 1024:  # Max 5MB per analisi testo
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
+                        
+                        # Statistiche base
                         file_info["text_info"] = {
                             "lines": len(content.split('\n')),
                             "chars": len(content),
                             "words": len(content.split())
                         }
+                        
+                        # Contenuto completo per vettorizzazione (limitato per performance)
+                        if len(content) > 10000:  # Se troppo lungo, tronca mantenendo inizio e fine
+                            preview = content[:5000] + "\n\n... [CONTENUTO TRONCATO] ...\n\n" + content[-5000:]
+                            file_info["content_preview"] = preview
+                            print(f"📄 Contenuto estratto da {file_path.name}: {len(preview)} caratteri (troncato)")
+                        else:
+                            file_info["content_preview"] = content
+                            print(f"📄 Contenuto estratto da {file_path.name}: {len(content)} caratteri")
+            except:
+                pass
+        
+        # PDF (usando PyPDF2)
+        elif extension == '.pdf':
+            try:
+                import PyPDF2
+                if file_info["size"] < 50 * 1024 * 1024:  # Max 50MB per PDF
+                    with open(file_path, 'rb') as f:
+                        pdf_reader = PyPDF2.PdfReader(f)
+                        text_content = ""
+                        # Estrai solo prime 10 pagine per performance
+                        max_pages = min(10, len(pdf_reader.pages))
+                        for i in range(max_pages):
+                            page = pdf_reader.pages[i]
+                            text_content += page.extract_text() + "\n"
+                        
+                        if text_content.strip():
+                            file_info["pdf_info"] = {
+                                "pages": len(pdf_reader.pages),
+                                "pages_analyzed": max_pages
+                            }
+                            file_info["content_preview"] = text_content[:8000]  # Prime 8000 chars
+            except:
+                pass
+        
+        # DOCX (usando python-docx)
+        elif extension in ['.docx']:
+            try:
+                from docx import Document
+                if file_info["size"] < 20 * 1024 * 1024:  # Max 20MB per DOCX
+                    doc = Document(file_path)
+                    text_content = ""
+                    for paragraph in doc.paragraphs[:100]:  # Prime 100 righe
+                        text_content += paragraph.text + "\n"
+                    
+                    if text_content.strip():
+                        file_info["docx_info"] = {
+                            "paragraphs": len(doc.paragraphs)
+                        }
+                        file_info["content_preview"] = text_content[:8000]
             except:
                 pass
     

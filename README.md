@@ -19,10 +19,10 @@ Un sistema avanzato di Retrieval-Augmented Generation (RAG) per l'analisi e gest
 - **Contesto persistente** per l'ultima cartella scansionata
 
 ### 💬 Chat AI Conversazionale
-- **DialoGPT-medium** integrato per conversazioni naturali
+- **Integrazione LM Studio** per usare qualsiasi modello LLM locale
 - **Risposte contestuali** basate sui file scansionati
 - **Analisi intelligente** con suggerimenti personalizzati
-- **Template ottimizzati** per query comuni sui file
+- **Compatibilità estesa** con modelli Mistral, Llama, Qwen, ecc.
 - **Supporto multilingua** (italiano/inglese)
 
 ### 📈 Visualizzazioni Dati
@@ -35,6 +35,7 @@ Un sistema avanzato di Retrieval-Augmented Generation (RAG) per l'analisi e gest
 
 ### Prerequisiti
 - Docker e Docker Compose
+- **LM Studio** installato e configurato
 - Oppure Python 3.11+ per esecuzione locale
 
 ### Installazione con Docker (Consigliato)
@@ -52,7 +53,17 @@ docker-compose up --build
 # Backend API: http://localhost:8000
 ```
 
-> **Nota**: Al primo avvio, il sistema scaricherà automaticamente DialoGPT-medium (~350MB) per la chat AI. Questo avviene in background e richiede 1-2 minuti. Nel frattempo, tutte le altre funzionalità sono già disponibili.
+### Configurazione LM Studio
+
+1. **Scarica e installa LM Studio**: https://lmstudio.ai
+2. **Carica un modello** (es. Mistral 7B, Llama 3.2, Qwen):
+   - Vai nella tab "Models" 
+   - Cerca e scarica un modello compatibile
+3. **Avvia il server locale**:
+   - Vai nella tab "Local Server"
+   - Carica il modello nella chat
+   - Clicca "Start Server" su porta 1234
+   - ✅ Verifica che appaia "Server running on http://localhost:1234"
 
 ### Installazione Locale
 
@@ -75,7 +86,8 @@ python -m http.server 5173
 - Clicca su "Analizza Directory"
 - Il sistema indicizzerà tutti i file trovati
 
-### 2. Chat Intelligente
+### 2. Chat Intelligente con LM Studio
+- **Assicurati che LM Studio sia attivo** su localhost:1234
 - Vai alla tab **"Chat AI"**
 - Fai domande sui tuoi file:
   - "Quali sono i file più grandi?"
@@ -83,6 +95,7 @@ python -m http.server 5173
   - "Cosa posso eliminare per liberare spazio?"
   - "Dammi un riassunto della cartella"
   - "Trova tutti i file immagine"
+- Il tuo modello LM Studio risponderà con contesto completo sui file!
 
 ### 3. Visualizza Grafico Vettori
 - Vai alla tab **"Grafico Vettori"**
@@ -106,7 +119,7 @@ python -m http.server 5173
                                ▼
                     ┌─────────────────────┐
                     │   AI Models         │
-                    │ - DialoGPT-medium   │
+                    │ - LM Studio API     │
                     │ - Sentence-Transform│
                     └─────────────────────┘
 ```
@@ -117,7 +130,8 @@ python -m http.server 5173
 - **FastAPI**: Framework web moderno e veloce
 - **ChromaDB**: Database vettoriale per embeddings
 - **Sentence Transformers**: Generazione embeddings semantici
-- **DialoGPT**: Modello conversazionale Microsoft/Hugging Face
+- **LM Studio Integration**: API REST per modelli LLM locali
+- **HTTPX**: Client HTTP asincrono per LM Studio API
 - **Python-Magic**: Rilevamento tipo MIME
 - **PyPDF2, python-docx, openpyxl**: Parsing documenti
 - **Pillow**: Analisi immagini
@@ -183,11 +197,12 @@ RAG-System-for-Files-Management/
 
 ## 🚦 Limitazioni e Note
 
-- **Dimensione modello**: DialoGPT-medium (~350MB) scaricato al primo avvio
-- **Performance**: La prima chat potrebbe essere lenta (caricamento modello)
-- **Memoria**: Richiesti almeno 4GB RAM per funzionamento ottimale
+- **LM Studio richiesto**: Necessario avere LM Studio installato e attivo
+- **Compatibilità modelli**: Testato con Mistral, Llama, Qwen (modelli senza ruolo "system")
+- **Memoria**: RAM richiesta dipende dal modello caricato in LM Studio
 - **File grandi**: File >100MB potrebbero rallentare l'indicizzazione
 - **Percorsi Docker**: In Docker, i percorsi locali sono mappati su `/host_root`
+- **Connettività**: Il container Docker deve poter accedere a `host.docker.internal:1234`
 
 ## 📝 License
 
@@ -196,8 +211,8 @@ MIT License - Vedi file [LICENSE](LICENSE) per dettagli
 ## 🙏 Acknowledgments
 
 - [ChromaDB](https://www.trychroma.com/) per il database vettoriale
+- [LM Studio](https://lmstudio.ai/) per l'interfaccia AI locale
 - [Hugging Face](https://huggingface.co/) per i modelli AI
-- [Microsoft DialoGPT](https://github.com/microsoft/DialoGPT) per il modello conversazionale
 - [Sentence Transformers](https://www.sbert.net/) per gli embeddings
 
 ---

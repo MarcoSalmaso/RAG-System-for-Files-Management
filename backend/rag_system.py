@@ -1,12 +1,12 @@
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import json
 from typing import List, Dict, Any, Optional
 import os
 from pathlib import Path
-import torch
+import httpx
+import asyncio
 
 class RAGSystem:
     def __init__(self):
@@ -19,10 +19,10 @@ class RAGSystem:
         # Inizializza il modello di embedding
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         
-        # Inizializza DialoGPT per la chat AI
-        self.chat_model = None
-        self.chat_tokenizer = None
-        self._initialize_chat_model()
+        # Configurazione LM Studio API  
+        self.lm_studio_url = "http://host.docker.internal:1234/v1/chat/completions"
+        self.lm_studio_available = False
+        self._check_lm_studio_availability()
         
         # Track the most recently scanned path for context
         self.last_scanned_path = None
@@ -36,39 +36,28 @@ class RAGSystem:
                 metadata={"hnsw:space": "cosine"}
             )
     
-    def _initialize_chat_model(self):
-        """Inizializza il modello DialoGPT in modo asincrono"""
-        try:
-            # Avvia il caricamento in background per non bloccare l'avvio del server
-            import threading
-            
-            def load_model():
-                try:
-                    print("🤖 Caricamento DialoGPT-medium in background...")
-                    self.chat_tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
-                    self.chat_model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-medium")
-                    
-                    # Imposta il pad token
-                    if self.chat_tokenizer.pad_token is None:
-                        self.chat_tokenizer.pad_token = self.chat_tokenizer.eos_token
-                    
-                    print("✅ DialoGPT caricato con successo!")
-                except Exception as e:
-                    print(f"❌ Errore nel caricamento di DialoGPT: {e}")
-                    print("🔄 Fallback: userò risposte template avanzate")
-                    self.chat_model = None
-                    self.chat_tokenizer = None
-            
-            # Avvia il caricamento in un thread separato
-            thread = threading.Thread(target=load_model, daemon=True)
-            thread.start()
-            
-            print("🚀 Server avviato! DialoGPT si sta caricando in background...")
-            
-        except Exception as e:
-            print(f"Errore nell'inizializzazione: {e}")
-            self.chat_model = None
-            self.chat_tokenizer = None
+    def _check_lm_studio_availability(self):
+        """Controlla se LM Studio è disponibile in modo asincrono"""
+        import threading
+        
+        def check_availability():
+            try:
+                import requests
+                response = requests.get("http://host.docker.internal:1234/v1/models", timeout=2)
+                if response.status_code == 200:
+                    self.lm_studio_available = True
+                    print("✅ LM Studio rilevato e disponibile!")
+                else:
+                    self.lm_studio_available = False
+                    print("⚠️ LM Studio non risponde correttamente")
+            except Exception:
+                self.lm_studio_available = False
+                print("⚠️ LM Studio non disponibile. Assicurati che sia avviato su localhost:1234")
+                print("💡 Userò risposte template intelligenti")
+        
+        # Controlla in background per non bloccare l'avvio
+        thread = threading.Thread(target=check_availability, daemon=True)
+        thread.start()
     
     def set_scanned_path_context(self, scanned_path: str):
         """Set the most recently scanned path for context"""
@@ -214,10 +203,37 @@ class RAGSystem:
             txt_info = file_info["text_info"]
             parts.append(f"File di testo con {txt_info['lines']} righe e {txt_info['words']} parole")
         
+        if file_info.get("pdf_info"):
+            pdf_info = file_info["pdf_info"]
+            parts.append(f"PDF con {pdf_info['pages']} pagine")
+        
+        if file_info.get("docx_info"):
+            docx_info = file_info["docx_info"]
+            parts.append(f"Documento Word con {docx_info['paragraphs']} paragrafi")
+        
         if file_info["type"] == "directory":
             parts.append(f"Directory con {file_info.get('file_count', 0)} file e {file_info.get('dir_count', 0)} sottodirectory")
         
-        return " | ".join(parts)
+        # NUOVA SEZIONE: Aggiungi contenuto estratto per ricerca semantica
+        content_parts = []
+        
+        # Contenuto di file di testo, PDF, DOCX
+        if file_info.get("content_preview"):
+            content_preview = file_info["content_preview"]
+            # Pulisci e limita il contenuto per l'embedding
+            content_cleaned = content_preview.replace('\n', ' ').replace('\t', ' ')
+            # Limita a 2000 caratteri per performance degli embeddings
+            if len(content_cleaned) > 2000:
+                content_cleaned = content_cleaned[:2000] + "..."
+            content_parts.append(f"CONTENUTO: {content_cleaned}")
+            print(f"🔍 Vettorizzando contenuto per {file_info.get('name', 'file')}: {len(content_cleaned)} caratteri")
+        
+        # Combina metadati e contenuto
+        base_text = " | ".join(parts)
+        if content_parts:
+            return base_text + " | " + " | ".join(content_parts)
+        else:
+            return base_text
     
     async def query(self, query_text: str, filters: Optional[Dict[str, Any]] = None, n_results: int = 10) -> Dict[str, Any]:
         """Esegue una query sul sistema RAG"""
@@ -357,57 +373,71 @@ class RAGSystem:
         return "\n".join(response_parts)
     
     async def chat_with_ai(self, user_message: str, conversation_history: List[Dict] = None, n_results: int = 50) -> Dict[str, Any]:
-        """Chat conversazionale con AI usando i dati reali dal database"""
+        """Chat conversazionale con AI usando solo LM Studio"""
         
-        # 1. Per domande sui file, recupera TUTTI i documenti dal database invece di fare similarity search
-        user_lower = user_message.lower()
-        file_related_keywords = [
-            'grande', 'pesante', 'dimensione', 'spazio', 'mb', 'gb',
-            'cartelle', 'directory', 'tipo', 'formato', 'elimina', 'cancella',
-            'riassunto', 'statistiche', 'totale', 'quanti', 'ciao', 'cosa'
-        ]
-        
-        is_file_query = any(keyword in user_lower for keyword in file_related_keywords)
-        
-        if is_file_query:
-            # Per domande sui file, ottieni TUTTI i dati dal database
-            all_files = await self._get_all_files_from_database()
-            response = self._generate_template_response(user_message, all_files)
-            
+        # Se LM Studio non è disponibile, restituisci errore
+        if not self.lm_studio_available:
             return {
-                "response": response,
-                "context_used": len(all_files),
-                "relevant_files": all_files[:5] if all_files else [],
-                "conversation_context": True
+                "response": "❌ LM Studio non è disponibile. Avvialo su localhost:1234 e ricarica la pagina.",
+                "context_used": 0,
+                "relevant_files": [],
+                "conversation_context": False
             }
-        else:
-            # Per conversazioni generiche, usa similarity search + AI
-            relevant_docs = await self.query(user_message, n_results=n_results)
+        
+        # Recupera sempre tutti i file per dare il contesto completo al modello
+        all_files = await self._get_all_files_from_database()
+        
+        # Controlla se l'utente chiede il contenuto di un file specifico
+        specific_file_content = await self._get_specific_file_content(user_message, all_files)
+        
+        # Prepara il contesto dettagliato per LM Studio
+        context_parts = []
+        if all_files:
+            context_parts.append("=== INFORMAZIONI SUI FILE SCANSIONATI ===")
             
-            # Prepara il contesto dai documenti
-            context_parts = []
-            if relevant_docs["results"]:
-                context_parts.append("INFORMAZIONI SUI FILE:")
-                for result in relevant_docs["results"][:5]:
-                    metadata = result["metadata"]
-                    context_parts.append(f"- {metadata['name']}: {metadata.get('size_human', 'N/A')}")
+            # Statistiche generali
+            total_files = len(all_files)
+            total_size = sum(f["metadata"].get("size", 0) for f in all_files)
+            total_human = self._format_size(total_size)
+            context_parts.append(f"Totale: {total_files} file ({total_human})")
             
-            # Prova DialoGPT se disponibile
-            if self.chat_model and self.chat_tokenizer:
-                ai_response = await self._generate_ai_response(user_message, context_parts, conversation_history)
-                if "non sono riuscito" not in ai_response.lower():
-                    response = ai_response
-                else:
-                    response = "Ciao! Per ottenere informazioni sui tuoi file, prova a chiedere cose come 'file più grandi' o 'riassunto'."
-            else:
-                response = "Ciao! DialoGPT si sta ancora caricando. Intanto puoi chiedermi informazioni sui file!"
+            # Percorso scansionato
+            if self.last_scanned_path:
+                context_parts.append(f"Cartella: {self.last_scanned_path}")
             
-            return {
-                "response": response,
-                "context_used": len(relevant_docs["results"]) if "relevant_docs" in locals() else 0,
-                "relevant_files": relevant_docs["results"][:5] if "relevant_docs" in locals() and relevant_docs["results"] else [],
-                "conversation_context": True
-            }
+            # Se è stato richiesto un file specifico, aggiungi il suo contenuto
+            if specific_file_content:
+                context_parts.append(f"\n=== CONTENUTO DEL FILE RICHIESTO ===")
+                context_parts.append(specific_file_content)
+            
+            # Primi file più grandi
+            sorted_files = sorted(all_files, key=lambda x: x["metadata"].get("size", 0), reverse=True)
+            context_parts.append("\nFile più grandi:")
+            for i, f in enumerate(sorted_files[:10]):
+                name = f['metadata']['name']
+                size = f['metadata'].get('size_human', 'N/A')
+                file_type = f['metadata'].get('type', 'file')
+                context_parts.append(f"{i+1}. {name} - {size} ({file_type})")
+            
+            # Distribuzione per tipo
+            types = {}
+            for f in all_files:
+                file_type = f['metadata'].get('type', 'unknown')
+                types[file_type] = types.get(file_type, 0) + 1
+            
+            context_parts.append("\nDistribuzione per tipo:")
+            for file_type, count in sorted(types.items(), key=lambda x: x[1], reverse=True):
+                context_parts.append(f"- {count} {file_type}")
+        
+        # Usa solo LM Studio per la risposta
+        response = await self._generate_lm_studio_response(user_message, context_parts, conversation_history)
+        
+        return {
+            "response": response if response else "❌ Errore nella comunicazione con LM Studio",
+            "context_used": len(all_files),
+            "relevant_files": sorted_files[:5] if all_files else [],
+            "conversation_context": True
+        }
     
     async def _get_all_files_from_database(self) -> List[Dict]:
         """Recupera file dal database filtrati per il contesto dell'ultima scansione"""
@@ -448,189 +478,104 @@ class RAGSystem:
             print(f"Errore nel recupero di tutti i file: {e}")
             return []
     
-    async def _generate_ai_response(self, user_message: str, context_parts: List[str], conversation_history: List[Dict]) -> str:
-        """Genera risposta usando DialoGPT con contesto"""
+    async def _generate_lm_studio_response(self, user_message: str, context_parts: List[str], conversation_history: List[Dict]) -> str:
+        """Genera risposta usando LM Studio API"""
         try:
-            # Prepara il prompt con contesto
+            # Prepara il contesto
             context_text = "\n".join(context_parts) if context_parts else ""
             
-            # Costruisci la conversazione
-            prompt = f"Sistema di gestione file. {context_text}\n\nUtente: {user_message}\nAssistente:"
+            # Costruisci i messaggi per l'API (senza system role per compatibilità Mistral)
+            messages = []
             
-            # Tokenizza
-            inputs = self.chat_tokenizer.encode(prompt, return_tensors="pt")
+            # Aggiungi storico conversazione se presente
+            if conversation_history:
+                for msg in conversation_history[-5:]:  # Ultimi 5 messaggi
+                    role = "user" if msg.get("role") == "user" else "assistant"
+                    if role in ["user", "assistant"]:  # Solo ruoli supportati
+                        messages.append({
+                            "role": role,
+                            "content": msg.get("content", "")
+                        })
             
-            # Limita la lunghezza dell'input
-            if inputs.size(1) > 800:
-                inputs = inputs[:, -800:]
+            # Prepara il messaggio con istruzioni integrate
+            user_prompt = f"""Sei un assistente intelligente per la gestione file. Rispondi in italiano in modo utile e conciso.
+
+Contesto file: {context_text}
+
+Domanda: {user_message}"""
             
-            # Genera risposta
-            with torch.no_grad():
-                outputs = self.chat_model.generate(
-                    inputs,
-                    max_length=inputs.size(1) + 150,
-                    num_beams=3,
-                    no_repeat_ngram_size=2,
-                    temperature=0.8,
-                    do_sample=True,
-                    pad_token_id=self.chat_tokenizer.eos_token_id,
-                    eos_token_id=self.chat_tokenizer.eos_token_id
+            # Aggiungi il messaggio corrente con istruzioni integrate
+            messages.append({
+                "role": "user",
+                "content": user_prompt
+            })
+            
+            # Chiamata API a LM Studio
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                payload = {
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 300
+                }
+                
+                response = await client.post(
+                    self.lm_studio_url,
+                    json=payload
                 )
-            
-            # Decodifica la risposta
-            response = self.chat_tokenizer.decode(outputs[0], skip_special_tokens=True)
-            
-            # Estrai solo la parte nuova della risposta
-            if "Assistente:" in response:
-                response = response.split("Assistente:")[-1].strip()
-            
-            # Pulisci la risposta
-            response = response.replace("Utente:", "").strip()
-            
-            return response if response else "Mi dispiace, non sono riuscito a generare una risposta appropriata."
-            
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if "choices" in result and len(result["choices"]) > 0:
+                        return result["choices"][0]["message"]["content"].strip()
+                    else:
+                        print(f"Risposta LM Studio non valida: {result}")
+                        return "Errore: risposta non valida da LM Studio"
+                else:
+                    error_text = response.text if hasattr(response, 'text') else 'N/A'
+                    print(f"LM Studio API error: {response.status_code} - {error_text}")
+                    print(f"Payload inviato: {payload}")
+                    return f"❌ Errore API LM Studio: {response.status_code}"
+                    
         except Exception as e:
-            print(f"Errore nella generazione AI: {e}")
-            return self._generate_template_response(user_message, [])
+            print(f"Errore nella chiamata a LM Studio: {e}")
+            self.lm_studio_available = False
+            return f"❌ Errore connessione LM Studio: {str(e)}"
     
-    def _generate_template_response(self, user_message: str, relevant_files: List[Dict]) -> str:
-        """Risposte template intelligenti e accurate"""
+    
+    async def _get_specific_file_content(self, user_message: str, all_files: List[Dict]) -> str:
+        """Rileva se l'utente chiede il contenuto di un file specifico e lo restituisce"""
         user_message_lower = user_message.lower()
         
-        if not relevant_files:
-            return "Non ho trovato file nel database. Prova a scansionare prima una directory dalla tab 'Scansiona'."
+        # Parole chiave che indicano richiesta di contenuto
+        content_keywords = ['leggi', 'mostra', 'contenuto', 'riassunto', 'riassumi', 'cosa dice', 'cosa contiene', 'apri']
         
-        # Aggiungi indicazione del contesto se presente
-        context_info = ""
-        if self.last_scanned_path:
-            context_info = f"📂 Analizzando la cartella: {self.last_scanned_path}\n\n"
+        if not any(keyword in user_message_lower for keyword in content_keywords):
+            return ""
         
-        # 1. ANALISI PER DIMENSIONI E SPAZIO
-        if any(word in user_message_lower for word in ['grande', 'pesante', 'dimensione', 'spazio', 'mb', 'gb', 'più grandi']):
-            # Ordina per dimensione decrescente
-            sorted_files = sorted(relevant_files, key=lambda x: x["metadata"].get("size", 0), reverse=True)
-            large_files = [f for f in sorted_files if f["metadata"].get("size", 0) > 1024*1024]  # > 1MB
+        # Cerca il file menzionato nel messaggio
+        for file_data in all_files:
+            file_name = file_data["metadata"].get("name", "")
             
-            if large_files:
-                response = f"{context_info}📊 File più grandi (ordinati per dimensione):\n\n"
-                for i, f in enumerate(large_files[:8]):
-                    size_human = f['metadata'].get('size_human', 'N/A')
-                    name = f['metadata']['name']
-                    file_type = f['metadata'].get('type', 'file')
-                    response += f"{i+1}. {name}\n   💾 {size_human} ({file_type})\n\n"
-                
-                total_size = sum(f["metadata"].get("size", 0) for f in large_files[:8])
-                total_human = self._format_size(total_size)
-                response += f"📈 Totale primi 8 file: {total_human}"
-                return response
-            else:
-                return "Non ho trovato file particolarmente grandi nel database."
-                
-        # 2. ANALISI PER CARTELLE/DIRECTORY
-        elif any(word in user_message_lower for word in ['cartelle', 'directory', 'cartella', 'folder']):
-            directories = [f for f in relevant_files if f["metadata"].get("type") == "directory"]
-            if directories:
-                # Ordina per dimensione decrescente
-                sorted_dirs = sorted(directories, key=lambda x: x["metadata"].get("size", 0), reverse=True)
-                response = f"{context_info}📁 Cartelle più pesanti:\n\n"
-                for i, d in enumerate(sorted_dirs[:6]):
-                    size_human = d['metadata'].get('size_human', 'N/A')
-                    name = d['metadata']['name']
-                    file_count = d['metadata'].get('file_count', 0)
-                    response += f"{i+1}. {name}/\n   💾 {size_human} ({file_count} elementi)\n\n"
-                return response
-            else:
-                return "Non ho trovato informazioni su cartelle nel database."
-                
-        # 3. ANALISI PER TIPO DI FILE
-        elif any(word in user_message_lower for word in ['tipo', 'formato', 'estensione', 'cosa ho', 'contenuto']):
-            # Raggruppa per tipo
-            types = {}
-            for f in relevant_files:
-                file_type = f['metadata'].get('type', 'unknown')
-                if file_type not in types:
-                    types[file_type] = []
-                types[file_type].append(f)
+            # Controlla se il nome del file (o parte di esso) è nel messaggio
+            file_name_parts = file_name.lower().replace('.pdf', '').replace('.txt', '').replace('.docx', '').split()
             
-            response = f"{context_info}📋 Tipi di file nel database:\n\n"
-            for file_type, files in sorted(types.items(), key=lambda x: len(x[1]), reverse=True):
-                count = len(files)
-                total_size = sum(f["metadata"].get("size", 0) for f in files)
-                size_human = self._format_size(total_size)
-                response += f"• {file_type}: {count} file ({size_human})\n"
+            # Se almeno 2 parole del nome del file sono nel messaggio
+            matches = sum(1 for part in file_name_parts if len(part) > 2 and part in user_message_lower)
             
-            return response
-            
-        # 4. SUGGERIMENTI PULIZIA
-        elif any(word in user_message_lower for word in ['elimina', 'cancella', 'pulire', 'spazio libero', 'liberare']):
-            # Trova file grandi e potenzialmente eliminabili
-            candidates = []
-            for f in relevant_files:
-                size = f["metadata"].get("size", 0)
-                name = f['metadata']['name'].lower()
-                
-                # Criteri per suggerimenti di pulizia
-                if (size > 100*1024*1024 or  # > 100MB
-                    'cache' in name or 'temp' in name or 'log' in name or
-                    name.endswith('.tmp') or name.endswith('.bak')):
-                    candidates.append(f)
-            
-            if candidates:
-                # Ordina per dimensione decrescente
-                sorted_candidates = sorted(candidates, key=lambda x: x["metadata"].get("size", 0), reverse=True)
-                response = f"{context_info}🧹 File che puoi considerare di eliminare:\n\n"
-                for i, f in enumerate(sorted_candidates[:6]):
-                    size_human = f['metadata'].get('size_human', 'N/A')
-                    name = f['metadata']['name']
-                    reason = "File grande" if f["metadata"].get("size", 0) > 100*1024*1024 else "File temporaneo/cache"
-                    response += f"{i+1}. {name}\n   💾 {size_human} - {reason}\n\n"
-                
-                total_space = sum(f["metadata"].get("size", 0) for f in sorted_candidates[:6])
-                space_human = self._format_size(total_space)
-                response += f"💡 Liberando questi file guadagni: {space_human}"
-                return response
-            else:
-                return "Non ho trovato file particolarmente grandi o temporanei da suggerire per la pulizia."
-                
-        # 5. RIASSUNTO/STATISTICHE
-        elif any(word in user_message_lower for word in ['riassunto', 'statistiche', 'totale', 'quanti', 'ciao', 'cosa puoi']):
-            total_files = len(relevant_files)
-            total_size = sum(f["metadata"].get("size", 0) for f in relevant_files)
-            total_human = self._format_size(total_size)
-            
-            # Raggruppa per tipo
-            types = {}
-            for f in relevant_files:
-                file_type = f['metadata'].get('type', 'unknown')
-                types[file_type] = types.get(file_type, 0) + 1
-            
-            response = f"{context_info}📊 Riassunto cartella:\n\n"
-            response += f"📁 {total_files} elementi totali\n"
-            response += f"💾 Dimensione totale: {total_human}\n\n"
-            response += f"📋 Distribuzione per tipo:\n"
-            for file_type, count in sorted(types.items(), key=lambda x: x[1], reverse=True):
-                response += f"• {count} {file_type}\n"
-            
-            response += f"\n💡 Puoi chiedermi:\n"
-            response += f"• 'Quali sono i file più grandi?'\n"
-            response += f"• 'Cartelle più pesanti'\n" 
-            response += f"• 'Cosa posso eliminare?'\n"
-            
-            return response
-            
-        # 6. RISPOSTA GENERICA MIGLIORATA
-        else:
-            # Ordina per rilevanza
-            sorted_files = sorted(relevant_files, key=lambda x: x.get('similarity_score', 0), reverse=True)
-            response = f"{context_info}🔍 Ho trovato {len(relevant_files)} file correlati:\n\n"
-            for i, f in enumerate(sorted_files[:5]):
-                name = f['metadata']['name']
-                size_human = f['metadata'].get('size_human', 'N/A')
-                similarity = f.get('similarity_score', 0)
-                response += f"{i+1}. {name} ({size_human}) - {int(similarity*100)}% rilevante\n"
-            
-            return response
-    
+            if matches >= min(2, len(file_name_parts)) or file_name.lower() in user_message_lower:
+                # File trovato! Restituisci il contenuto se disponibile
+                content = file_data.get("document", "")
+                if "CONTENUTO:" in content:
+                    # Estrai solo la parte del contenuto
+                    content_start = content.find("CONTENUTO:") + len("CONTENUTO:")
+                    extracted_content = content[content_start:].strip()
+                    
+                    return f"FILE: {file_name}\n\nCONTENUTO ESTRATTO:\n{extracted_content[:8000]}{'...' if len(extracted_content) > 8000 else ''}"
+                else:
+                    return f"FILE: {file_name}\n\nIl file è stato trovato ma non contiene contenuto testuale estraibile."
+        
+        return ""
+
     def _format_size(self, size_bytes):
         """Formatta dimensione in bytes in formato leggibile"""
         if size_bytes == 0:

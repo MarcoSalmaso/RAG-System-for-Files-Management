@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Analyzer RAG System</title>
+    <title>File Analyzer RAG System v2.0</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -155,21 +158,30 @@
                 </h2>
                 
                 <div class="mb-4 flex justify-between items-center">
-                    <p class="text-sm text-gray-600">
-                        Visualizzazione grafica dei documenti vettorializzati nel database. 
-                        I punti vicini rappresentano file con contenuto simile.
-                    </p>
-                    <button onclick="loadVectors()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                        <i class="fas fa-sync mr-2"></i>Aggiorna
-                    </button>
+                    <div>
+                        <p class="text-sm text-gray-600 mb-1">
+                            Visualizzazione 3D dei documenti nel database vettoriale
+                        </p>
+                        <p class="text-xs text-gray-500">
+                            Punti vicini = contenuto simile • Dimensione = peso file • Colore = tipo
+                        </p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="resetZoom()" class="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm">
+                            <i class="fas fa-expand mr-1"></i>Reset
+                        </button>
+                        <button onclick="loadVectors()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                            <i class="fas fa-sync mr-2"></i>Aggiorna
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- Legenda -->
                 <div id="vectors-legend" class="mb-4 flex flex-wrap gap-2"></div>
                 
                 <!-- Canvas per il grafico -->
-                <div class="relative bg-gray-50 rounded-lg p-4" style="height: 600px;">
-                    <canvas id="vectors-canvas" width="800" height="600"></canvas>
+                <div class="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-lg p-4 shadow-inner" style="height: calc(100vh - 300px); min-height: 700px;">
+                    <canvas id="vectors-canvas" style="width: 100%; height: 100%; border-radius: 8px;"></canvas>
                     
                     <!-- Info tooltip -->
                     <div id="vector-tooltip" class="hidden absolute bg-white shadow-lg rounded-lg p-3 z-10" style="pointer-events: none;">
@@ -398,10 +410,8 @@
                     // Aggiungi risposta AI alla chat
                     addMessageToChat(data.response, 'ai');
                     
-                    // Mostra file rilevanti se presenti
-                    if (data.relevant_files && data.relevant_files.length > 0) {
-                        showRelevantFiles(data.relevant_files);
-                    }
+                    // I file rilevanti non vengono più mostrati automaticamente
+                    // Il modello LM Studio include già le informazioni necessarie nella sua risposta
                     
                     // Aggiorna cronologia conversazione
                     conversationHistory.push({role: 'user', content: message});
@@ -563,14 +573,22 @@
             const ctx = canvas.getContext('2d');
             const tooltip = document.getElementById('vector-tooltip');
             
+            // Imposta dimensioni canvas responsive
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             if (!data.vectors || data.vectors.length === 0) {
-                ctx.fillStyle = '#666';
-                ctx.font = '16px sans-serif';
+                ctx.fillStyle = '#9CA3AF'; // gray-400 per testo su sfondo scuro
+                ctx.font = '18px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText('Nessun documento nel database', canvas.width / 2, canvas.height / 2);
+                ctx.fillStyle = '#6B7280'; // gray-500 
+                ctx.font = '14px sans-serif';
+                ctx.fillText('Scansiona una directory per visualizzare i dati', canvas.width / 2, canvas.height / 2 + 30);
                 return;
             }
             
@@ -589,8 +607,12 @@
             const scaleX = (x) => padding + ((x - xMin) / xRange) * (canvas.width - 2 * padding);
             const scaleY = (y) => padding + ((y - yMin) / yRange) * (canvas.height - 2 * padding);
             
-            // Disegna griglia di sfondo
-            ctx.strokeStyle = '#E5E7EB';
+            // Sfondo scuro del canvas
+            ctx.fillStyle = 'rgba(17, 24, 39, 0.95)'; // gray-900 con trasparenza
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Disegna griglia di sfondo (tema scuro)
+            ctx.strokeStyle = 'rgba(75, 85, 99, 0.3)'; // gray-600 trasparente
             ctx.lineWidth = 0.5;
             for (let i = 0; i <= 10; i++) {
                 const x = padding + (i / 10) * (canvas.width - 2 * padding);
@@ -737,6 +759,21 @@
                 loadVectors();
             }
         };
+        
+        // Ridimensiona il canvas quando la finestra cambia dimensioni
+        window.addEventListener('resize', () => {
+            if (document.getElementById('vectors-tab').classList.contains('active') && vectorsData) {
+                setTimeout(() => displayVectorsVisualization(vectorsData), 100);
+            }
+        });
+        
+        // Reset zoom function
+        function resetZoom() {
+            if (vectorsData) {
+                selectedCategory = null;
+                displayVectorsVisualization(vectorsData);
+            }
+        }
         
         // Load initial stats
         window.addEventListener('DOMContentLoaded', () => {
