@@ -28,7 +28,6 @@ Un sistema avanzato di Retrieval-Augmented Generation (RAG) per l'analisi e gest
 ### 📈 Visualizzazioni Dati
 - **Grafico vettori 3D** con PCA per visualizzare la distribuzione dei file
 - **Categorizzazione visuale** per tipo di file con colori distinti
-- **Statistiche sistema** con utilizzo CPU, memoria e disco
 - **Distribuzione tipi file** con grafici interattivi
 
 ## 🚀 Quick Start
@@ -103,11 +102,6 @@ python -m http.server 5173
 - I colori indicano diverse categorie (immagini, documenti, codice, etc.)
 - Passa il mouse sui punti per vedere i dettagli
 
-### 4. Statistiche Sistema
-- Vai alla tab **"Statistiche"**
-- Monitora l'utilizzo di CPU, RAM e disco
-- Visualizza la distribuzione dei tipi di file
-
 ## 🏗️ Architettura
 
 ```
@@ -135,7 +129,6 @@ python -m http.server 5173
 - **Python-Magic**: Rilevamento tipo MIME
 - **PyPDF2, python-docx, openpyxl**: Parsing documenti
 - **Pillow**: Analisi immagini
-- **psutil**: Statistiche sistema
 
 ### Frontend
 - **HTML5/CSS3/JavaScript**: Interfaccia responsive
@@ -151,7 +144,6 @@ python -m http.server 5173
 | `/scan` | POST | Scansiona una directory |
 | `/chat` | POST | Chat conversazionale AI |
 | `/query` | POST | Query RAG sui file |
-| `/stats` | GET | Statistiche sistema |
 | `/vectors` | GET | Vettori per visualizzazione |
 | `/file-types` | GET | Distribuzione tipi file |
 | `/clear` | DELETE | Pulisce l'indice |
