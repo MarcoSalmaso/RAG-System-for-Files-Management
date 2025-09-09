@@ -1,6 +1,5 @@
 import chromadb
 from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
 import json
 from typing import List, Dict, Any, Optional
 import os
@@ -16,11 +15,11 @@ class RAGSystem:
             settings=Settings(anonymized_telemetry=False)
         )
         
-        # Inizializza il modello di embedding
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        
-        # Configurazione LM Studio API  
-        self.lm_studio_url = "http://host.docker.internal:1234/v1/chat/completions"
+        # Configurazione LM Studio API per embedding e chat
+        self.lm_studio_embedding_url = "http://host.docker.internal:1234/v1/embeddings"
+        self.lm_studio_chat_url = "http://host.docker.internal:1234/v1/chat/completions"
+        self.embedding_model_name = "google/embedding-gemma-300m"
+        self.chat_model_name = "mistralai/mistral-7b-instruct-v0.3"
         self.lm_studio_available = False
         self._check_lm_studio_availability()
         
@@ -47,17 +46,84 @@ class RAGSystem:
                 if response.status_code == 200:
                     self.lm_studio_available = True
                     print("✅ LM Studio rilevato e disponibile!")
+                    print(f"📊 Modello embedding: {self.embedding_model_name}")
+                    print(f"💬 Modello chat: {self.chat_model_name}")
                 else:
                     self.lm_studio_available = False
                     print("⚠️ LM Studio non risponde correttamente")
             except Exception:
                 self.lm_studio_available = False
                 print("⚠️ LM Studio non disponibile. Assicurati che sia avviato su localhost:1234")
-                print("💡 Userò risposte template intelligenti")
+                print("💡 Carica i modelli Gemma per embedding e Mistral per chat")
         
         # Controlla in background per non bloccare l'avvio
         thread = threading.Thread(target=check_availability, daemon=True)
         thread.start()
+    
+    async def _get_lm_studio_embedding(self, text: str) -> List[float]:
+        """Genera embedding usando LM Studio con Gemma"""
+        if not self.lm_studio_available:
+            raise Exception("LM Studio non disponibile per embedding")
+        
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                payload = {
+                    "input": text,
+                    "model": self.embedding_model_name
+                }
+                
+                response = await client.post(
+                    self.lm_studio_embedding_url,
+                    json=payload
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if "data" in result and len(result["data"]) > 0:
+                        embedding = result["data"][0]["embedding"]
+                        print(f"🔍 Embedding generato: {len(embedding)} dimensioni")
+                        return embedding
+                    else:
+                        raise Exception(f"Risposta embedding non valida: {result}")
+                else:
+                    error_text = response.text if hasattr(response, 'text') else 'N/A'
+                    raise Exception(f"Errore API embedding: {response.status_code} - {error_text}")
+                    
+        except Exception as e:
+            print(f"❌ Errore generazione embedding: {e}")
+            # Fallback: se il modello di embedding non è caricato, suggerisci il cambio
+            print(f"💡 Assicurati che il modello {self.embedding_model_name} sia caricato in LM Studio")
+            raise e
+    
+    async def _get_lm_studio_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """Genera embeddings in batch per migliorare le performance"""
+        if not self.lm_studio_available:
+            raise Exception("LM Studio non disponibile per embedding")
+        
+        embeddings = []
+        batch_size = 5  # Processa 5 testi alla volta
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            batch_embeddings = []
+            
+            # Processa ogni testo nel batch
+            for text in batch:
+                try:
+                    embedding = await self._get_lm_studio_embedding(text)
+                    batch_embeddings.append(embedding)
+                    # Piccola pausa per non sovraccaricare l'API
+                    await asyncio.sleep(0.1)
+                except Exception as e:
+                    print(f"⚠️ Errore embedding per testo: {e}")
+                    # In caso di errore, aggiungi un embedding nullo
+                    # Il chiamante dovrà gestire questo caso
+                    raise e
+            
+            embeddings.extend(batch_embeddings)
+            print(f"📊 Processati {len(embeddings)}/{len(texts)} embedding")
+        
+        return embeddings
     
     def set_scanned_path_context(self, scanned_path: str):
         """Set the most recently scanned path for context"""
@@ -68,16 +134,14 @@ class RAGSystem:
         documents = []
         metadatas = []
         ids = []
-        embeddings = []
         
+        print(f"🚀 Iniziando indicizzazione di {len(file_data)} file...")
+        
+        # Prepara tutti i documenti prima
         for i, file_info in enumerate(file_data):
             # Crea un documento testuale per l'embedding
             doc_text = self._create_document_text(file_info)
             documents.append(doc_text)
-            
-            # Genera l'embedding per il documento
-            embedding = self.embedding_model.encode(doc_text).tolist()
-            embeddings.append(embedding)
             
             # Prepara i metadati (ChromaDB supporta solo valori semplici)
             metadata = {
@@ -98,8 +162,12 @@ class RAGSystem:
             unique_id = f"file_{abs(hash(file_info['path']))}"
             ids.append(unique_id)
         
+        # Genera tutti gli embeddings in batch
+        print("🧠 Generando embeddings con Gemma...")
+        embeddings = await self._get_lm_studio_embeddings_batch(documents)
+        
         # Aggiungi alla collection con embeddings, evitando duplicati
-        if documents:
+        if documents and embeddings:
             try:
                 self.collection.add(
                     documents=documents,
@@ -238,8 +306,8 @@ class RAGSystem:
     async def query(self, query_text: str, filters: Optional[Dict[str, Any]] = None, n_results: int = 10) -> Dict[str, Any]:
         """Esegue una query sul sistema RAG"""
         
-        # Genera l'embedding per la query
-        query_embedding = self.embedding_model.encode(query_text).tolist()
+        # Genera l'embedding per la query usando LM Studio
+        query_embedding = await self._get_lm_studio_embedding(query_text)
         
         # Prepara i filtri per ChromaDB
         where_filter = {}
@@ -510,16 +578,17 @@ Domanda: {user_message}"""
                 "content": user_prompt
             })
             
-            # Chiamata API a LM Studio
+            # Chiamata API a LM Studio con modello Mistral
             async with httpx.AsyncClient(timeout=30.0) as client:
                 payload = {
+                    "model": self.chat_model_name,
                     "messages": messages,
                     "temperature": 0.7,
                     "max_tokens": 300
                 }
                 
                 response = await client.post(
-                    self.lm_studio_url,
+                    self.lm_studio_chat_url,
                     json=payload
                 )
                 
